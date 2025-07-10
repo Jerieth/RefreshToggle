@@ -11,16 +11,19 @@ monitorIndex := 0
 hzInGame := 160
 hzOutOfGame := 120
 autoState := "idle"
+
 ; === Initialize last known refresh rate at startup ===
 lastScriptedRate := Round(GetCurrentRefreshRate())
 if lastScriptedRate = "" || !IsNumber(lastScriptedRate)
     lastScriptedRate := 120  ; fallback default
 lastScriptedTime := A_TickCount
+lastManualCheck := A_TickCount
+
 scriptPath := "C:\Scripts\PowerShell\Cycle-RefreshRate.ps1"
 
 ; === Tooltip & GUI Defaults ===
 DefaultGuiOpts := "+AlwaysOnTop -Caption +ToolWindow -DPIScale"
-DefaultFont := "s10 bold"
+DefaultFont := "s12 bold"
 DefaultFontFace := "Segoe UI"
 DefaultBackColor := "Black"
 DefaultOpacity := 220
@@ -234,23 +237,34 @@ MonitorLaunchers() {
 }
 
 CheckManualRefreshChange() {
-    global lastScriptedRate, lastScriptedTime
-    currentHz := GetCurrentRefreshRate()
-    if currentHz != "" && currentHz != lastScriptedRate {
-        if (A_TickCount - lastScriptedTime > 5000) {
-            LogRefreshChange(currentHz, "Manual - User changed refresh rate")
-            lastScriptedRate := currentHz
-            lastScriptedTime := A_TickCount
-            ShowTestTooltip("Refresh rate manually changed to " . currentHz . " Hz", "Yellow", DurationManual)
-        }
+    global lastScriptedRate, lastScriptedTime, lastManualCheck
+
+    ; Only check every 10 seconds
+    if (A_TickCount - lastManualCheck < 10000)
+        return
+
+    lastManualCheck := A_TickCount
+    currentHz := Round(GetCurrentRefreshRate())
+
+    ; Ignore invalid readings
+    if currentHz = "" || !IsNumber(currentHz)
+        return
+
+    ; Only trigger if the difference is > 10 Hz
+    if Abs(currentHz - lastScriptedRate) > 10 {
+        LogRefreshChange(currentHz, "Manual - User changed refresh rate")
+        lastScriptedRate := currentHz
+        lastScriptedTime := A_TickCount
+        ShowTestTooltip("Refresh rate manually changed to " . currentHz . " Hz", "Yellow", DurationManual)
     }
 }
 
 GetCurrentRefreshRate() {
     try {
-        output := ""
-        RunWait('powershell -Command "Get-CimInstance -Namespace root\wmi -ClassName WmiMonitorBasicDisplayParams | ForEach-Object { $_.MaxVerticalImageSize }"', , "Hide", &output)
-        return Trim(output)
+        query := ComObjGet("winmgmts:").ExecQuery("Select * from Win32_VideoController")
+        for item in query {
+            return Round(item.CurrentRefreshRate)
+        }
     } catch {
         return ""
     }
