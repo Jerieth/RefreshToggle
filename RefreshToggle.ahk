@@ -1,8 +1,4 @@
 #Requires AutoHotkey v2.0
-IsDebugMode() {
-    return debugMode
-}
-
 ; === Log Setup ===
 logDir := "C:\Logs"
 logDate := FormatTime(, "yyyy-MM-dd")
@@ -20,6 +16,9 @@ Loop Files logDir "\RefreshRate_*.log" {
         FileDelete A_LoopFileFullPath
 }
 
+IsDebugMode() {
+    return debugMode
+}
 ; === UI & Tooltip Defaults ===
 DefaultGuiOpts     := "+AlwaysOnTop -Caption +ToolWindow -DPIScale"
 DefaultFont        := "s10 bold"
