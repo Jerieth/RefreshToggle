@@ -100,16 +100,26 @@ ToggleDebugMode() {
     color := debugToggleState ? "Green" : "Red"
     ShowTestTooltip(msg, color, DurationToggle)
 }
-2::if debugMode
-    ShowTestTooltip("⚠️ Cannot change refresh rate:`nSampleApp.exe is currently running.", "Red", DurationBlocked)
-3::if debugMode
-    ShowTestTooltip("Refresh rate manually changed to 144 Hz", "Yellow", DurationManual)
-4::if debugMode
-    ShowTestTooltip("Switched to 160 Hz", "White", DurationChanged)
-5::if debugMode
-    ShowTestTooltip("Closing Refresh Toggle...", "Yellow", DurationExit)
-6::if debugMode
-    ShowDebugConfirmationPrompt()
+2:: {
+    if debugMode
+        ShowTestTooltip("⚠️ Cannot change refresh rate:`nSampleApp.exe is currently running.", "Red", DurationBlocked)
+}
+3:: {
+    if debugMode
+        ShowTestTooltip("Refresh rate manually changed to 144 Hz", "Yellow", DurationManual)
+}
+4:: {
+    if debugMode
+        ShowTestTooltip("Switched to 160 Hz", "White", DurationChanged)
+}
+5:: {
+    if debugMode
+        ShowTestTooltip("Closing Refresh Toggle...", "Yellow", DurationExit)
+}
+6:: {
+    if debugMode
+        ShowDebugConfirmationPrompt()
+}
 
 ; === Main Polling ===
 MainPollingLoop() {
