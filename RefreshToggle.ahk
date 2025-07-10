@@ -16,7 +16,7 @@ Loop Files logDir "\RefreshRate_*.log" {
         FileDelete A_LoopFileFullPath
 }
 
-IsDebugMode() {
+IsDebugMode(*) {
     return debugMode
 }
 ; === UI & Tooltip Defaults ===
