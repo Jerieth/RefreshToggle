@@ -1,4 +1,7 @@
 #Requires AutoHotkey v2.0
+IsDebugMode() {
+    return debugMode
+}
 
 ; === Log Setup ===
 logDir := "C:\Logs"
@@ -92,7 +95,7 @@ NumLock::CheckNumLockState()
 ^+!Esc::ToggleDebugMode()
 
 ; === Debug Test Keys ===
-HotIf(() => debugMode)
+HotIf(IsDebugMode)
 
 1:: {
     global debugToggleState
