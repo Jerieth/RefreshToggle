@@ -109,17 +109,17 @@ NumLock::CheckNumLockState()
 
 ; === Main Polling Loop ===
 MainPollingLoop() {
-    global scriptEnabled
-    if !scriptEnabled
+    global scriptEnabled, debugMode
+    if debugMode || !scriptEnabled
         return
     MonitorLaunchers()
     CheckManualRefreshChange()
 }
 
 CheckNumLockState() {
-    global scriptEnabled
-    global tooltipGui
-
+    global scriptEnabled, tooltipGui, debugMode
+    if debugMode
+        return
     isOn := GetKeyState("NumLock", "T")
     if isOn && !scriptEnabled {
         scriptEnabled := true
@@ -262,6 +262,9 @@ GetCurrentRefreshRate() {
 }
 
 TryToggleRefreshRate(*) {
+    global debugMode
+    if debugMode
+        return
     if app := GetRunningLauncher() {
         ShowTestTooltip("⚠️ Cannot change refresh rate:`n" app " is currently running.", "Red", DurationBlocked)
         return
