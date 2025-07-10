@@ -1,120 +1,118 @@
 #Requires AutoHotkey v2.0
 
-; === Log Setup ===
+; === Global Setup ===
+debugMode := false
+debugToggleState := false
+scriptEnabled := true
+refreshRates := [120, 144, 159.97]
+displayLabels := ["120", "144", "160"]
+currentIndex := 0
+monitorIndex := 0
+hzInGame := 160
+hzOutOfGame := 120
+autoState := "idle"
+lastScriptedRate := 120
+lastScriptedTime := A_TickCount
+scriptPath := "C:\Scripts\PowerShell\Cycle-RefreshRate.ps1"
+
+; === Tooltip & GUI Defaults ===
+DefaultGuiOpts := "+AlwaysOnTop -Caption +ToolWindow -DPIScale"
+DefaultFont := "s10 bold"
+DefaultFontFace := "Segoe UI"
+DefaultBackColor := "Black"
+DefaultOpacity := 220
+TooltipOffsetX := 350
+TooltipOffsetY := 150
+
+; === Tooltip Durations ===
+DurationToggle := 3000
+DurationBlocked := 3500
+DurationManual := 3000
+DurationChanged := 2000
+DurationExit := 10000
+DurationDebugFade := 5000
+
+; === Sound Cues ===
+SoundSoft := "*64"
+SoundAlert := "*48"
+
+; === Logging Setup ===
 logDir := "C:\Logs"
 logDate := FormatTime(, "yyyy-MM-dd")
 logFile := logDir . "\RefreshRate_" . logDate . ".log"
-
 if !FileExist(logDir)
     DirCreate(logDir)
-
 if !FileExist(logFile)
     FileAppend("=== Refresh Rate Log Started: " . logDate . " ===`n", logFile)
-
 Loop Files logDir "\RefreshRate_*.log" {
     age := (A_Now - A_LoopFileTimeModified) // 86400
     if age > 30
         FileDelete A_LoopFileFullPath
 }
 
+; === Launcher List ===
+launchers := [
+    "steam.exe", "Playnite.DesktopApp.exe", "EpicGamesLauncher.exe",
+    "Amazon Games.exe", "EADesktop.exe", "UbisoftConnect.exe",
+    "Battle.net.exe", "RockstarLauncher.exe", "RiotClientServices.exe"
+]
 
-; === UI & Tooltip Defaults ===
-DefaultGuiOpts     := "+AlwaysOnTop -Caption +ToolWindow -DPIScale"
-DefaultFont        := "s10 bold"
-DefaultFontFace    := "Segoe UI"
-DefaultBackColor   := "Black"
-DefaultOpacity     := 220
-
-; === Tooltip Durations (in ms) ===
-DurationToggle     := 3000
-DurationBlocked    := 3500
-DurationManual     := 3000
-DurationChanged    := 2000
-DurationExit       := 10000
-DurationDebugFade  := 5000
-
-; === Sound Cues ===
-SoundSoft          := "*64"
-SoundAlert         := "*48"
-
-; === Tooltip Position Offsets ===
-TooltipOffsetX     := 350
-TooltipOffsetY     := 150
-
-; === Refresh Rate Settings ===
-refreshRates := [120, 144, 159.97]
-displayLabels := ["120", "144", "160"]
-currentIndex := 0
-monitorIndex := 0
+; === GUI Handles ===
 tooltipGui := Gui(DefaultGuiOpts)
 tooltipGui.Opacity := DefaultOpacity
 tooltipGui.BackColor := DefaultBackColor
 tooltipGui.SetFont(DefaultFont, DefaultFontFace)
-
-; === Game Launchers to Monitor ===
-launchers := [
-    "steam.exe",
-    "Playnite.DesktopApp.exe",
-    "EpicGamesLauncher.exe",
-    "Amazon Games.exe",
-    "EADesktop.exe",
-    "UbisoftConnect.exe",
-    "Battle.net.exe",
-    "RockstarLauncher.exe",
-    "RiotClientServices.exe"
-]
-
-; === Paths ===
-scriptPath := "C:\Scripts\PowerShell\Cycle-RefreshRate.ps1"
-hzInGame := 160
-hzOutOfGame := 120
-autoState := "idle"
-
-; === Hotkeys ===
-hotkeys := ["^+r", "^!r", "^+!r"]
-for hk in hotkeys
-    Hotkey(hk, (*) => TryToggleRefreshRate())
-
-; === State Tracking ===
-lastScriptedRate := 120
-lastScriptedTime := A_TickCount
-scriptEnabled := true
-debugMode := false
-debugToggleState := false
 debugOverlay := Gui(DefaultGuiOpts)
-debugOverlay.Opacity := DefaultOpacity
-debugOverlay.BackColor := DefaultBackColor
-debugOverlay.SetFont(DefaultFont, DefaultFontFace)
 
-; === Timers ===
+; === Timers & Hotkeys ===
 SetTimer(MainPollingLoop, 3000)
 SetTimer(CheckNumLockState, 30000)
-NumLock::CheckNumLockState()
 ^+!Esc::ToggleDebugMode()
+NumLock::CheckNumLockState()
+Hotkey("^+r", (*) => TryToggleRefreshRate())
+Hotkey("^!r", (*) => TryToggleRefreshRate())
+Hotkey("^+!r", (*) => TryToggleRefreshRate())
 
-IsDebugMode(*) {
-    return debugMode
+; === Debug Toggle ===
+ToggleDebugMode() {
+    global debugMode, debugOverlay
+    debugMode := !debugMode
+    debugOverlay.Destroy()
+    debugOverlay := Gui(DefaultGuiOpts)
+    debugOverlay.Opacity := DefaultOpacity
+    debugOverlay.BackColor := DefaultBackColor
+    debugOverlay.SetFont(DefaultFont, DefaultFontFace)
+    msg := debugMode ? "Debug On" : "Debug Off"
+    debugOverlay.AddText("cWhite BackgroundBlack", msg)
+    debugOverlay.Show("x10 y10 NoActivate")
+    SoundPlay(SoundSoft)
+    if !debugMode
+        SetTimer(() => debugOverlay.Hide(), -DurationDebugFade)
 }
 
-; === Debug Test Keys ===
-HotIf(IsDebugMode)
+; === Debug Test Keys (Always Active, Gated by debugMode) ===
 1:: {
-    global debugToggleState
+    global debugToggleState, debugMode
+    if !debugMode
+        return
     debugToggleState := !debugToggleState
     msg := debugToggleState ? "Refresh Toggle (Hz) On" : "Refresh Toggle (Hz) Off"
     color := debugToggleState ? "Green" : "Red"
     ShowTestTooltip(msg, color, DurationToggle)
 }
-2::ShowTestTooltip("⚠️ Cannot change refresh rate:`nSampleApp.exe is currently running.", "Red", DurationBlocked)
-3::ShowTestTooltip("Refresh rate manually changed to 144 Hz", "Yellow", DurationManual)
-4::ShowTestTooltip("Switched to 160 Hz", "White", DurationChanged)
-5::ShowTestTooltip("Closing Refresh Toggle...", "Yellow", DurationExit)
-6::ShowDebugConfirmationPrompt()
-HotIf()  ; Reset context
+2::if debugMode
+    ShowTestTooltip("⚠️ Cannot change refresh rate:`nSampleApp.exe is currently running.", "Red", DurationBlocked)
+3::if debugMode
+    ShowTestTooltip("Refresh rate manually changed to 144 Hz", "Yellow", DurationManual)
+4::if debugMode
+    ShowTestTooltip("Switched to 160 Hz", "White", DurationChanged)
+5::if debugMode
+    ShowTestTooltip("Closing Refresh Toggle...", "Yellow", DurationExit)
+6::if debugMode
+    ShowDebugConfirmationPrompt()
 
-; === Main Polling Loop ===
+; === Main Polling ===
 MainPollingLoop() {
-    global scriptEnabled
     if !scriptEnabled
         return
     MonitorLaunchers()
@@ -123,8 +121,6 @@ MainPollingLoop() {
 
 CheckNumLockState() {
     global scriptEnabled
-    global tooltipGui
-
     isOn := GetKeyState("NumLock", "T")
     if isOn && !scriptEnabled {
         scriptEnabled := true
@@ -149,25 +145,6 @@ ShowToggleTooltip(text, color) {
     tooltipGui.Show("x" (right - TooltipOffsetX) " y" (bottom - TooltipOffsetY) " NoActivate")
     SoundPlay(SoundSoft)
     SetTimer(() => tooltipGui.Hide(), -DurationToggle)
-}
-
-ToggleDebugMode() {
-    global debugMode, debugOverlay
-
-    debugMode := !debugMode
-    debugOverlay.Destroy()
-    debugOverlay := Gui(DefaultGuiOpts)
-    debugOverlay.Opacity := DefaultOpacity
-    debugOverlay.BackColor := DefaultBackColor
-    debugOverlay.SetFont(DefaultFont, DefaultFontFace)
-
-    msg := debugMode ? "Debug On" : "Debug Off"
-    debugOverlay.AddText("cWhite BackgroundBlack", msg)
-    debugOverlay.Show("x10 y10 NoActivate")
-    SoundPlay(SoundSoft)
-
-    if !debugMode
-        SetTimer(() => debugOverlay.Hide(), -DurationDebugFade)
 }
 
 ShowTestTooltip(text, color, duration) {
@@ -195,7 +172,6 @@ ShowDebugConfirmationPrompt() {
     MonitorGet(MonitorGetPrimary(), &left, &top, &right, &bottom)
     tooltipGui.Show("x" (right - 300) " y" (bottom - TooltipOffsetY) " NoActivate")
     SoundPlay(SoundSoft)
-
     confirmed := false
     Hotkey("y", (*) => confirmed := true, "On")
     Loop 100 {
@@ -227,7 +203,6 @@ LogRefreshChange(rate, reason := "") {
 
 MonitorLaunchers() {
     global autoState, scriptPath, hzInGame, hzOutOfGame, lastScriptedRate, lastScriptedTime
-
     if app := GetRunningLauncher() {
         if autoState != "in-game" {
             RunWait('powershell.exe -ExecutionPolicy Bypass -File "' scriptPath '" -Rate ' hzInGame, , "Hide")
@@ -247,29 +222,30 @@ MonitorLaunchers() {
 
 CheckManualRefreshChange() {
     global lastScriptedRate, lastScriptedTime
-
     currentHz := GetCurrentRefreshRate()
     if currentHz != "" && currentHz != lastScriptedRate {
-        if (A_TickCount - lastScriptedTime > 3000) {
-            ShowTestTooltip("Refresh rate manually changed to " currentHz " Hz", "Yellow", DurationManual)
-            LogRefreshChange(currentHz, "Manual change detected outside script")
+        if (A_TickCount - lastScriptedTime > 5000) {
+            LogRefreshChange(currentHz, "Manual - User changed refresh rate")
             lastScriptedRate := currentHz
+            lastScriptedTime := A_TickCount
+            ShowTestTooltip("Refresh rate manually changed to " . currentHz . " Hz", "Yellow", DurationManual)
         }
     }
 }
 
 GetCurrentRefreshRate() {
-    devMode := Buffer(156, 0)
-    NumPut("UInt", 156, devMode, 36)  ; dmSize
-    if DllCall("EnumDisplaySettings", "Ptr", 0, "UInt", -1, "Ptr", devMode) {
-        return Round(NumGet(devMode, 104, "UInt"))  ; dmDisplayFrequency
+    try {
+        output := ""
+        RunWait('powershell -Command "Get-CimInstance -Namespace root\wmi -ClassName WmiMonitorBasicDisplayParams | ForEach-Object { $_.MaxVerticalImageSize }"', , "Hide", &output)
+        return Trim(output)
+    } catch {
+        return ""
     }
-    return ""
 }
 
 TryToggleRefreshRate(*) {
     if app := GetRunningLauncher() {
-        ShowTestTooltip("⚠️ Cannot change refresh rate:`n" app " is currently running.", "Red", DurationBlocked)
+        ShowTestTooltip("⚠️ Cannot change refresh rate:`n" . app . " is currently running.", "Red", DurationBlocked)
         return
     }
     ToggleRefreshRate()
