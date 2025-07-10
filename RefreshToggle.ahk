@@ -92,7 +92,8 @@ NumLock::CheckNumLockState()
 ^+!Esc::ToggleDebugMode()
 
 ; === Debug Test Keys ===
-#If debugMode
+HotIf(() => debugMode)
+
 1:: {
     global debugToggleState
     debugToggleState := !debugToggleState
@@ -105,7 +106,8 @@ NumLock::CheckNumLockState()
 4::ShowTestTooltip("Switched to 160 Hz", "White", DurationChanged)
 5::ShowTestTooltip("Closing Refresh Toggle...", "Yellow", DurationExit)
 6::ShowDebugConfirmationPrompt()
-#If
+
+HotIf()  ; Reset context
 
 ; === Main Polling Loop ===
 MainPollingLoop() {
