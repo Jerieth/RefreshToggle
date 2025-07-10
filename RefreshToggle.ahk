@@ -17,6 +17,7 @@ Loop Files logDir "\RefreshRate_*.log" {
         FileDelete A_LoopFileFullPath
 }
 
+
 ; === UI & Tooltip Defaults ===
 DefaultGuiOpts     := "+AlwaysOnTop -Caption +ToolWindow -DPIScale"
 DefaultFont        := "s10 bold"
@@ -91,8 +92,12 @@ SetTimer(CheckNumLockState, 30000)
 NumLock::CheckNumLockState()
 ^+!Esc::ToggleDebugMode()
 
+IsDebugMode(*) {
+    return debugMode
+}
+
 ; === Debug Test Keys ===
-#If debugMode
+HotIf(IsDebugMode)
 1:: {
     global debugToggleState
     debugToggleState := !debugToggleState
@@ -105,7 +110,7 @@ NumLock::CheckNumLockState()
 4::ShowTestTooltip("Switched to 160 Hz", "White", DurationChanged)
 5::ShowTestTooltip("Closing Refresh Toggle...", "Yellow", DurationExit)
 6::ShowDebugConfirmationPrompt()
-#If
+HotIf()  ; Reset context
 
 ; === Main Polling Loop ===
 MainPollingLoop() {
