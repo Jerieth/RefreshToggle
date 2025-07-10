@@ -1,4 +1,5 @@
 #Requires AutoHotkey v2.0
+
 ; === Log Setup ===
 logDir := "C:\Logs"
 logDate := FormatTime(, "yyyy-MM-dd")
@@ -16,9 +17,6 @@ Loop Files logDir "\RefreshRate_*.log" {
         FileDelete A_LoopFileFullPath
 }
 
-IsDebugMode(*) {
-    return debugMode
-}
 ; === UI & Tooltip Defaults ===
 DefaultGuiOpts     := "+AlwaysOnTop -Caption +ToolWindow -DPIScale"
 DefaultFont        := "s10 bold"
@@ -94,7 +92,7 @@ NumLock::CheckNumLockState()
 ^+!Esc::ToggleDebugMode()
 
 ; === Debug Test Keys ===
-HotIf(Func("IsDebugMode"))
+HotIf(() => debugMode)
 
 1:: {
     global debugToggleState
@@ -109,21 +107,20 @@ HotIf(Func("IsDebugMode"))
 5::ShowTestTooltip("Closing Refresh Toggle...", "Yellow", DurationExit)
 6::ShowDebugConfirmationPrompt()
 
-HotIf()  ; Reset context
+HotIf()
 
 ; === Main Polling Loop ===
 MainPollingLoop() {
-    global scriptEnabled, debugMode
-    if debugMode || !scriptEnabled
+    if !scriptEnabled
         return
     MonitorLaunchers()
     CheckManualRefreshChange()
 }
 
 CheckNumLockState() {
-    global scriptEnabled, tooltipGui, debugMode
-    if debugMode
-        return
+    global scriptEnabled
+    global tooltipGui
+
     isOn := GetKeyState("NumLock", "T")
     if isOn && !scriptEnabled {
         scriptEnabled := true
@@ -205,6 +202,7 @@ ShowDebugConfirmationPrompt() {
     Hotkey("y", "Off")
     tooltipGui.Hide()
 }
+
 GetRunningLauncher() {
     global launchers
     for launcher in launchers {
@@ -248,29 +246,28 @@ CheckManualRefreshChange() {
 
     currentHz := GetCurrentRefreshRate()
     if currentHz != "" && currentHz != lastScriptedRate {
-        if (A_TickCount - lastScriptedTime > 3000) {
-            ShowTestTooltip("Refresh rate manually changed to " currentHz " Hz", "Yellow", DurationManual)
-            LogRefreshChange(currentHz, "Manual change detected outside script")
+        if (A_TickCount - lastScriptedTime > 5000) {
+            LogRefreshChange(currentHz, "Manual - User changed refresh rate")
             lastScriptedRate := currentHz
+            lastScriptedTime := A_TickCount
+            ShowTestTooltip("Refresh rate manually changed to " . currentHz . " Hz", "Yellow", DurationManual)
         }
     }
 }
 
 GetCurrentRefreshRate() {
-    devMode := Buffer(156, 0)
-    NumPut("UInt", 156, devMode, 36)  ; dmSize
-    if DllCall("EnumDisplaySettings", "Ptr", 0, "UInt", -1, "Ptr", devMode) {
-        return Round(NumGet(devMode, 104, "UInt"))  ; dmDisplayFrequency
+    try {
+        output := ""
+        RunWait('powershell -Command "Get-CimInstance -Namespace root\wmi -ClassName WmiMonitorBasicDisplayParams | ForEach-Object { $_.MaxVerticalImageSize }"', , "Hide", &output)
+        return Trim(output)
+    } catch {
+        return ""
     }
-    return ""
 }
 
 TryToggleRefreshRate(*) {
-    global debugMode
-    if debugMode
-        return
     if app := GetRunningLauncher() {
-        ShowTestTooltip("⚠️ Cannot change refresh rate:`n" app " is currently running.", "Red", DurationBlocked)
+        ShowTestTooltip("⚠️ Cannot change refresh rate:`n" . app . " is currently running.", "Red", DurationBlocked)
         return
     }
     ToggleRefreshRate()
