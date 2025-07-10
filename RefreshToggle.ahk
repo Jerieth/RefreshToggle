@@ -11,7 +11,10 @@ monitorIndex := 0
 hzInGame := 160
 hzOutOfGame := 120
 autoState := "idle"
-lastScriptedRate := 120
+; === Initialize last known refresh rate at startup ===
+lastScriptedRate := Round(GetCurrentRefreshRate())
+if lastScriptedRate = "" || !IsNumber(lastScriptedRate)
+    lastScriptedRate := 120  ; fallback default
 lastScriptedTime := A_TickCount
 scriptPath := "C:\Scripts\PowerShell\Cycle-RefreshRate.ps1"
 
