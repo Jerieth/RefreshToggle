@@ -92,8 +92,7 @@ NumLock::CheckNumLockState()
 ^+!Esc::ToggleDebugMode()
 
 ; === Debug Test Keys ===
-HotIf(() => debugMode)
-
+#If debugMode
 1:: {
     global debugToggleState
     debugToggleState := !debugToggleState
@@ -106,11 +105,11 @@ HotIf(() => debugMode)
 4::ShowTestTooltip("Switched to 160 Hz", "White", DurationChanged)
 5::ShowTestTooltip("Closing Refresh Toggle...", "Yellow", DurationExit)
 6::ShowDebugConfirmationPrompt()
-
-HotIf()
+#If
 
 ; === Main Polling Loop ===
 MainPollingLoop() {
+    global scriptEnabled
     if !scriptEnabled
         return
     MonitorLaunchers()
@@ -246,28 +245,26 @@ CheckManualRefreshChange() {
 
     currentHz := GetCurrentRefreshRate()
     if currentHz != "" && currentHz != lastScriptedRate {
-        if (A_TickCount - lastScriptedTime > 5000) {
-            LogRefreshChange(currentHz, "Manual - User changed refresh rate")
+        if (A_TickCount - lastScriptedTime > 3000) {
+            ShowTestTooltip("Refresh rate manually changed to " currentHz " Hz", "Yellow", DurationManual)
+            LogRefreshChange(currentHz, "Manual change detected outside script")
             lastScriptedRate := currentHz
-            lastScriptedTime := A_TickCount
-            ShowTestTooltip("Refresh rate manually changed to " . currentHz . " Hz", "Yellow", DurationManual)
         }
     }
 }
 
 GetCurrentRefreshRate() {
-    try {
-        output := ""
-        RunWait('powershell -Command "Get-CimInstance -Namespace root\wmi -ClassName WmiMonitorBasicDisplayParams | ForEach-Object { $_.MaxVerticalImageSize }"', , "Hide", &output)
-        return Trim(output)
-    } catch {
-        return ""
+    devMode := Buffer(156, 0)
+    NumPut("UInt", 156, devMode, 36)  ; dmSize
+    if DllCall("EnumDisplaySettings", "Ptr", 0, "UInt", -1, "Ptr", devMode) {
+        return Round(NumGet(devMode, 104, "UInt"))  ; dmDisplayFrequency
     }
+    return ""
 }
 
 TryToggleRefreshRate(*) {
     if app := GetRunningLauncher() {
-        ShowTestTooltip("⚠️ Cannot change refresh rate:`n" . app . " is currently running.", "Red", DurationBlocked)
+        ShowTestTooltip("⚠️ Cannot change refresh rate:`n" app " is currently running.", "Red", DurationBlocked)
         return
     }
     ToggleRefreshRate()
