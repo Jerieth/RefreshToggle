@@ -94,7 +94,7 @@ NumLock::CheckNumLockState()
 ^+!Esc::ToggleDebugMode()
 
 ; === Debug Test Keys ===
-HotIf(IsDebugMode)
+HotIf(Func("IsDebugMode"))
 
 1:: {
     global debugToggleState
