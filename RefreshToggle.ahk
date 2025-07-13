@@ -274,7 +274,7 @@ MainPollingLoop() {
     if !scriptEnabled
         return
     MonitorLaunchers()
-    ;CheckManualRefreshChange()
+    ;Get current refresh rate via WMI
 }
 
 MonitorLaunchers() {
