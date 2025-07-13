@@ -1,8 +1,21 @@
 #Requires AutoHotkey v2.0
-Menu Tray, NoStandard
-Menu Tray, Add, Exit, ExitApp
-Menu Tray, Icon, A_ScriptDir "\120.ico"  ; Default icon on startup
+#SingleInstance Force
+#Warn All
+#Warn LocalSameAsGlobal, Off
+global tooltipVisible := false
 
+InitTrayMenu()
+
+InitTrayMenu(iconFile := A_ScriptDir "\120.ico") {
+    A_TrayMenu.Delete()
+    A_TrayMenu.Add("Exit", ExitScript)
+}
+
+ExitScript(*) {
+    ExitApp
+}
+
+TraySetIcon A_ScriptDir "\120.ico"
 ;RefreshToggle.ahk v4.2 — Stable Release
 
 ; === Global Setup ===
@@ -31,7 +44,7 @@ SetTrayIconByHz(hz) {
     if !IsNumber(hz) || hz = ""
     {
         icon := A_ScriptDir "\default.ico"
-        Menu Tray, Icon, %icon%
+        Menu("Tray", "Icon", icon)
         return
     }
     switch hz {
@@ -40,7 +53,7 @@ SetTrayIconByHz(hz) {
         case 160: icon := A_ScriptDir "\160.ico"
         default:  icon := A_ScriptDir "\default.ico"
     }
-    Menu Tray, Icon, %icon%
+    TraySetIcon icon
 }
 
 ; === Refresh Tracking ===
@@ -144,7 +157,7 @@ TryToggleRefreshRate(*) {
 
     SoundSoft := originalSound
 }
-Hotkey("^+r", TryToggleRefreshRate)
+;Hotkey("^+r", TryTyyoggleRefreshRate)
 Hotkey("^!r", TryToggleRefreshRate)
 Hotkey("^+!r", TryToggleRefreshRate)
 
@@ -200,37 +213,32 @@ ToggleDebugMode() {
 } */
 
 ; === Tooltip Functions ===
-ShowToggleTooltip(text, color, x := 350, y := 150) {
-    global tooltipGui, DefaultGuiOpts, DefaultOpacity, DefaultBackColor
+ShowToggleTooltip(text, color := "White", x := 350, y := 150) {
+    global tooltipGui, tooltipTextCtrl
+    global DefaultGuiOpts, DefaultOpacity, DefaultBackColor
     global DefaultFont, DefaultFontFace, SoundSoft, DurationToggle
 
-    ; Create the GUI once if it doesn't exist
-    if !IsSet(tooltipGui) || !IsObject(tooltipGui) {
-        tooltipGui := Gui(DefaultGuiOpts)
-        tooltipGui.Opacity := DefaultOpacity
-        tooltipGui.BackColor := DefaultBackColor
-        tooltipGui.SetFont(DefaultFont, DefaultFontFace)
-        tooltipGui.AddText("vTooltipText c" . color . " BackgroundBlack", text)
-    } else {
-        ; Update existing GUI
-        tooltipGui["TooltipText"].Text := text
-        tooltipGui["TooltipText"].SetFont("c" . color)
-    }
+    ; Destroy and recreate GUI for reliability
+    if IsObject(tooltipGui)
+        tooltipGui.Destroy()
+
+    tooltipGui := Gui(DefaultGuiOpts)
+    tooltipGui.Opacity := DefaultOpacity
+    tooltipGui.BackColor := DefaultBackColor
+    tooltipGui.SetFont(DefaultFont, DefaultFontFace)
+    tooltipTextCtrl := tooltipGui.AddText("c" . color . " BackgroundBlack", text)
 
     ; Position and show
     MonitorGet(MonitorGetPrimary(), &left, &top, &right, &bottom)
     tooltipGui.Show("x" (right - x) " y" (bottom - y) " NoActivate")
 
-    ; Play sound if set
+    ; Play sound if available
     if IsSet(SoundSoft) && SoundSoft != ""
         SoundPlay(SoundSoft)
 
-    ; Hide after delay
-    SetTimer(() => (
-        IsObject(tooltipGui) && tooltipGui.Visible ? tooltipGui.Hide() : ""
-    ), -DurationToggle)
+    ; Hide after a delay
+    SetTimer(() => tooltipGui.Hide(), -DurationToggle)
 }
-
 
 ShowTestTooltip(text, color, duration, x := 350, y := 150) {
     global tooltipGui, SoundSoft, DefaultGuiOpts, DefaultOpacity, DefaultBackColor
