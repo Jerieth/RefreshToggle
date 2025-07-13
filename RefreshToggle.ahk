@@ -1,4 +1,8 @@
 #Requires AutoHotkey v2.0
+#NoTrayIcon
+Menu Tray, NoIcon
+Menu Tray, Icon, A_ScriptDir "\monitor_icon_on.ico"
+
 ;RefreshToggle.ahk v4.2 — Stable Release
 
 ; === Global Setup ===
@@ -78,7 +82,7 @@ SetTimer(MainPollingLoop, 3000)
 
 global SoundOn := A_ScriptDir . "\On.wav"
 global SoundOff := A_ScriptDir . "\Off.wav"
-global NoSound := "" ; disables sound
+;global NoSound := "" ; disables sound
 
 ^+!Esc:: {
     global scriptEnabled, SoundOn, SoundOff, SoundSoft 
@@ -226,6 +230,7 @@ MainPollingLoop() {
 MonitorLaunchers() {
     global autoState, scriptPath, hzInGame, hzOutOfGame, lastScriptedRate, lastScriptedTime
     global TooltipX, TooltipY, DurationChanged
+	global SoundSoft
 	originalSound := SoundSoft
 	SoundSoft := ""
     if app := GetRunningLauncher() {
