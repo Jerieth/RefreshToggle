@@ -28,8 +28,8 @@ DefaultBackColor := "Black"
 DefaultOpacity := 220
 
 ; === Tooltip Positions (Per Message) ===
-TooltipX := Map(1, 350, 2, 500, 3, 550, 4, 350, 5, 375, 6, 575)
-TooltipY := Map(1, 150, 2, 175, 3, 150, 4, 150, 5, 150, 6, 200)
+TooltipX := Map(1, 350, 2, 500, 3, 550, 4, 350, 5, 375, 6, 575, 7, 595, 8, 375)
+TooltipY := Map(1, 150, 2, 175, 3, 150, 4, 150, 5, 150, 6, 200, 7, 200, 8, 185)
 
 ; === Tooltip Durations ===
 DurationToggle := 3000
@@ -78,6 +78,7 @@ SetTimer(MainPollingLoop, 3000)
 
 global SoundOn := A_ScriptDir . "\On.wav"
 global SoundOff := A_ScriptDir . "\Off.wav"
+global NoSound := "" ; disables sound
 
 ^+!Esc:: {
     global scriptEnabled, SoundOn, SoundOff, SoundSoft 
@@ -224,6 +225,9 @@ MainPollingLoop() {
 
 MonitorLaunchers() {
     global autoState, scriptPath, hzInGame, hzOutOfGame, lastScriptedRate, lastScriptedTime
+    global TooltipX, TooltipY, DurationChanged
+	originalSound := SoundSoft
+	SoundSoft := ""
     if app := GetRunningLauncher() {
         if autoState != "in-game" {
             RunWait('powershell.exe -ExecutionPolicy Bypass -File "' scriptPath '" -Rate ' hzInGame, , "Hide")
@@ -231,6 +235,7 @@ MonitorLaunchers() {
             lastScriptedRate := hzInGame
             lastScriptedTime := A_TickCount
             autoState := "in-game"
+            ShowTestTooltip("🎮 Launcher detected: " . app . "`nSwitched to " . hzInGame . " Hz", "White", DurationChanged, TooltipX[7], TooltipY[7])
         }
     } else if autoState = "in-game" {
         RunWait('powershell.exe -ExecutionPolicy Bypass -File "' scriptPath '" -Rate ' hzOutOfGame, , "Hide")
@@ -238,7 +243,9 @@ MonitorLaunchers() {
         lastScriptedRate := hzOutOfGame
         lastScriptedTime := A_TickCount
         autoState := "idle"
+        ShowTestTooltip("🛑 No launcher detected`nSwitched to " . hzOutOfGame . " Hz", "White", DurationChanged, TooltipX[8], TooltipY[8])
     }
+	SoundSoft := originalSound
 }
 
 /* CheckNumLockState() {
