@@ -1,30 +1,34 @@
 #Requires AutoHotkey v2.0
 #SingleInstance Force
+#Warn All, Off
 
+; === Paths ===
 iniPath := A_ScriptDir . "\AutoHDR.ini"
-logPath := "C:\Logs\AutoHDR.log"
-toggleHDRPath := A_ScriptDir . "\ToggleHDR.ps1"
+logDir := A_AppData . "\AutoHDR"
+if !DirExist(logDir)
+    DirCreate logDir
+logPath := logDir . "\AutoHDR.log"
+toggleHDRPath := A_ScriptDir . "\ToggleHDRv2.ps1"
 
+; === System Vars ===
 gameList := []
 failCount := 0
 maxFails := 5
 
-; === Centralized Color Styling ===
-ColorEnabled := "00BFFF"  ; Electric Blue
-ColorDisabled := "FFFFFF" ; White
-ColorError := "FF0000"    ; Red
-ColorInfo := "FFFF00"     ; Yellow
+; === Visual Styling ===
+ColorEnabled := "00BFFF"   ; HDR On (Blue)
+ColorDisabled := "FFFFFF"  ; HDR Off (White)
+ColorError := "FF0000"     ; Error (Red)
+ColorInfo := "FFFF00"      ; Info (Yellow)
 BackgroundColor := "Black"
 
-; === Initialize Log ===
+; === Log Initialization ===
 InitLog()
 
-; === INI Validation and Game List Loading ===
+; === INI Validation ===
 if !FileExist(iniPath) {
     LogAction("ERROR", "AutoHDR.ini missing — terminating script")
     ShowInfoTooltip("❗ Missing AutoHDR.ini config file. Add [Games] section with .exe titles.", ColorInfo)
-    Sleep 10000
-    ShowInfoTooltip("Closing script. No game list available.", ColorInfo)
     Sleep 10000
     ExitApp
 }
@@ -34,9 +38,8 @@ validCount := 0
 
 for line in StrSplit(gameSection, "`n", "`r") {
     trimmed := Trim(line)
-    if trimmed = "" || RegExMatch(trimmed, "^(#|;)") {
+    if trimmed = "" || RegExMatch(trimmed, "^(#|;)")
         continue
-    }
     if !RegExMatch(trimmed, "\.exe$") {
         LogAction("ERROR", "Invalid game entry skipped in INI: " . trimmed)
         continue
@@ -53,8 +56,6 @@ if validCount = 0 {
     LogAction("ERROR", "INI contains no valid .exe entries — terminating script")
     ShowInfoTooltip("❗ AutoHDR.ini is present but contains no valid game entries.", ColorInfo)
     Sleep 10000
-    ShowInfoTooltip("Closing script. No games to monitor.", ColorInfo)
-    Sleep 10000
     ExitApp
 }
 
@@ -68,24 +69,31 @@ tooltipGui.Opacity := DefaultOpacity
 tooltipGui.BackColor := BackgroundColor
 tooltipGui.SetFont("s12 bold", DefaultFontFace)
 
-; === Start Monitoring Loop ===
+; === Tray Icon Initialization ===
+SetTrayStatusIcon(false)
+
+; === Monitor Loop ===
 SetTimer(MonitorGames, 3000)
 
 MonitorGames() {
     static hdrOn := false
     if IsGameRunning() {
         if !hdrOn {
-            RunToggleHDR("on")
-            ShowHDRTooltip("🔆 HDR Enabled for Gaming", ColorEnabled)
-            LogAction("INFO", "HDR Enabled")
-            hdrOn := true
+            if RunToggleHDR("on") {
+                SetTrayStatusIcon(true)
+                ShowHDRTooltip("🔆 HDR Enabled for Gaming", ColorEnabled)
+                LogAction("INFO", "HDR Enabled")
+                hdrOn := true
+            }
         }
     } else {
         if hdrOn {
-            RunToggleHDR("off")
-            ShowHDRTooltip("🌑 HDR Disabled (No Game Running)", ColorDisabled)
-            LogAction("INFO", "HDR Disabled")
-            hdrOn := false
+            if RunToggleHDR("off") {
+                SetTrayStatusIcon(false)
+                ShowHDRTooltip("🌑 HDR Disabled (No Game Running)", ColorDisabled)
+                LogAction("INFO", "HDR Disabled")
+                hdrOn := false
+            }
         }
     }
 }
@@ -101,22 +109,41 @@ IsGameRunning() {
 
 RunToggleHDR(state) {
     global failCount, maxFails, toggleHDRPath
+    static lastFailTime := 0
+    now := A_TickCount
+
     if !FileExist(toggleHDRPath) {
         failCount += 1
-        LogAction("ERROR", "ToggleHDR.ps1 not found")
+        if (now - lastFailTime > 15000) {
+            lastFailTime := now
+            LogAction("ERROR", "ToggleHDRv2.ps1 not found")
+        }
         if failCount <= maxFails
             ShowErrorTooltip("⚠️ HDR script missing")
-        return
+        return false
     }
+
     result := RunWait('*RunAs powershell.exe -ExecutionPolicy Bypass -File "' toggleHDRPath '" ' state, , "Hide")
     if (result != 0) {
         failCount += 1
-        LogAction("ERROR", "PowerShell HDR toggle failed with code: " . result)
+        if (now - lastFailTime > 15000) {
+            lastFailTime := now
+            LogAction("ERROR", "PowerShell HDR toggle failed with code: " . result)
+        }
         if failCount <= maxFails
             ShowErrorTooltip("⚠️ HDR toggle failed (" . state . ")")
+        return false
     } else {
         failCount := 0
+        return true
     }
+}
+
+SetTrayStatusIcon(status) {
+    iconFile := status
+        ? A_ScriptDir "\monitor_icon_on.ico"
+        : A_ScriptDir "\monitor_icon_off.ico"
+    TraySetIcon iconFile
 }
 
 ShowHDRTooltip(text, color) {
@@ -129,8 +156,8 @@ ShowHDRTooltip(text, color) {
     tooltipGui.SetFont(fontSize . " bold", DefaultFontFace)
     tooltipGui.AddText("c" . color . " Background" . BackgroundColor, text)
     MonitorGet(MonitorGetPrimary(), &left, &top, &right, &bottom)
-    tooltipGui.Show("x" (right - 400) " y" (bottom - 150) " NoActivate")
-    SetTimer(() => tooltipGui.Hide(), -2500)
+    tooltipGui.Show("x" (right - 500) " y" (bottom - 150) " NoActivate")
+    SetTimer(() => tooltipGui.Hide(), -4000)
 }
 
 ShowErrorTooltip(text) {
@@ -143,14 +170,15 @@ ShowInfoTooltip(text, color := ColorInfo) {
 
 ShowFixedTooltip(text, color, x, y) {
     global BackgroundColor
-    fontSize := GetFontSizeByText(text)
-    gui := Gui("+AlwaysOnTop -Caption +ToolWindow -DPIScale")
-    gui.Opacity := 220
-    gui.BackColor := BackgroundColor
-    gui.SetFont(fontSize . " bold", "Segoe UI")
-    gui.AddText("c" . color . " Background" . BackgroundColor, text)
-    gui.Show("x" x " y" y " NoActivate")
-    SetTimer(() => gui.Hide(), -3000)
+    local fontSize := GetFontSizeByText(text)
+    local tempGui := Gui()
+    tempGui.Opt("+AlwaysOnTop -Caption +ToolWindow -DPIScale")
+    tempGui.Opacity := 220
+    tempGui.BackColor := BackgroundColor
+    tempGui.SetFont(fontSize . " bold", "Segoe UI")
+    tempGui.AddText("c" . color . " Background" . BackgroundColor, text)
+    tempGui.Show("x" x " y" y " NoActivate")
+    SetTimer(() => tempGui.Hide(), -3000)
 }
 
 GetFontSizeByText(text) {
@@ -168,7 +196,6 @@ LogAction(level, message) {
 InitLog() {
     global logPath
     if !FileExist(logPath) {
-        try FileCreateDir("C:\Logs")
         FileAppend "", logPath
         return
     }
@@ -177,11 +204,11 @@ InitLog() {
     if daysOld >= 30 {
         lines := FileRead(logPath)
         recentLines := StrSplit(lines, "`n")
-        if recentLines.Length > 100 {
-            FileDelete logPath
-            for i, line in recentLines[-100:] {
-                FileAppend line . "`n", logPath
-            }
+        startIndex := Max(recentLines.Length - 100, 0)
+        subset := recentLines.Slice(startIndex)
+        FileDelete logPath
+        for _, line in subset {
+            FileAppend line . "`n", logPath
         }
     }
 }
