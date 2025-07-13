@@ -1,7 +1,7 @@
 #Requires AutoHotkey v2.0
-#NoTrayIcon
-Menu Tray, NoIcon
-Menu Tray, Icon, A_ScriptDir "\monitor_icon_on.ico"
+Menu Tray, NoStandard
+Menu Tray, Add, Exit, ExitApp
+Menu Tray, Icon, A_ScriptDir "\120.ico"  ; Default icon on startup
 
 ;RefreshToggle.ahk v4.2 — Stable Release
 
@@ -17,12 +17,40 @@ hzOutOfGame := 120
 autoState := "idle"
 scriptPath := "C:\Scripts\PowerShell\Cycle-RefreshRate.ps1"
 
+
+
+; === Tray Icon Switching ===
+GetRefreshRateViaDll() {
+    hDC := DllCall("GetDC", "ptr", 0, "ptr")
+    rate := DllCall("GetDeviceCaps", "ptr", hDC, "int", 116)
+    DllCall("ReleaseDC", "ptr", 0, "ptr", hDC)
+    return Round(rate)
+}
+
+SetTrayIconByHz(hz) {
+    if !IsNumber(hz) || hz = ""
+    {
+        icon := A_ScriptDir "\default.ico"
+        Menu Tray, Icon, %icon%
+        return
+    }
+    switch hz {
+        case 120: icon := A_ScriptDir "\120.ico"
+        case 144: icon := A_ScriptDir "\144.ico"
+        case 160: icon := A_ScriptDir "\160.ico"
+        default:  icon := A_ScriptDir "\default.ico"
+    }
+    Menu Tray, Icon, %icon%
+}
+
 ; === Refresh Tracking ===
 lastScriptedRate := Round(GetCurrentRefreshRate())
 if lastScriptedRate = "" || !IsNumber(lastScriptedRate)
     lastScriptedRate := 120
 lastScriptedTime := A_TickCount
 lastManualCheck := A_TickCount
+
+SetTrayIconByHz(GetRefreshRateViaDll())
 
 ; === Tooltip Defaults ===
 DefaultGuiOpts := "+AlwaysOnTop -Caption +ToolWindow -DPIScale"
@@ -205,18 +233,40 @@ ShowToggleTooltip(text, color, x := 350, y := 150) {
 
 
 ShowTestTooltip(text, color, duration, x := 350, y := 150) {
-    global tooltipGui
+    global tooltipGui, SoundSoft, DefaultGuiOpts, DefaultOpacity, DefaultBackColor
+    global DefaultFont, DefaultFontFace
+
     tooltipGui.Destroy()
     tooltipGui := Gui(DefaultGuiOpts)
     tooltipGui.Opacity := DefaultOpacity
     tooltipGui.BackColor := DefaultBackColor
     tooltipGui.SetFont(DefaultFont, DefaultFontFace)
     tooltipGui.AddText("c" . color . " BackgroundBlack", text)
+
     MonitorGet(MonitorGetPrimary(), &left, &top, &right, &bottom)
     tooltipGui.Show("x" (right - x) " y" (bottom - y) " NoActivate")
+
     if IsSet(SoundSoft) && SoundSoft != ""
-		SoundPlay(SoundSoft)
+        SoundPlay(SoundSoft)
+
     SetTimer(() => tooltipGui.Hide(), -duration)
+
+    ; ── Tray Icon Switching Based on Tooltip Text ──
+    if InStr(text, "🎮 Launcher detected") {
+        SetTrayIconByHz(160)
+    } else if InStr(text, "🛑 No launcher detected") {
+        SetTrayIconByHz(120)
+    } else if InStr(text, "Switched to ") {
+        if InStr(text, "120 Hz") {
+            SetTrayIconByHz(120)
+        } else if InStr(text, "144 Hz") {
+            SetTrayIconByHz(144)
+        } else if InStr(text, "160 Hz") {
+            SetTrayIconByHz(160)
+        } else {
+            SetTrayIconByHz("")  ; fallback
+        }
+    }
 }
 
 ; === Main Polling ===
@@ -293,7 +343,7 @@ CheckManualRefreshChange() {
 }
 
 
-GetCurrentRefreshRate() {
+GetRefreshRateViaWMI() {
     try {
         query := ComObjGet("winmgmts:").ExecQuery("Select * from Win32_VideoController")
         for item in query
