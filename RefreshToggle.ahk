@@ -2,7 +2,7 @@
 ;RefreshToggle.ahk v4.2 — Stable Release
 
 ; === Global Setup ===
-debugMode := false
+;debugMode := false
 scriptEnabled := true
 refreshRates := [120, 144, 159.97]
 displayLabels := ["120", "144", "160"]
@@ -35,7 +35,7 @@ TooltipY := Map(1, 150, 2, 175, 3, 150, 4, 150, 5, 150, 6, 200)
 DurationToggle := 3000
 DurationBlocked := 3500
 DurationManual := 3000
-DurationChanged := 2000
+DurationChanged := 5000
 DurationExit := 10000
 DurationDebugFade := 5000
 
@@ -68,13 +68,49 @@ tooltipGui := Gui(DefaultGuiOpts)
 tooltipGui.Opacity := DefaultOpacity
 tooltipGui.BackColor := DefaultBackColor
 tooltipGui.SetFont(DefaultFont, DefaultFontFace)
-debugOverlay := Gui(DefaultGuiOpts)
+;debugOverlay := Gui(DefaultGuiOpts)
 
 ; === Hotkeys & Timers ===
 SetTimer(MainPollingLoop, 3000)
-SetTimer(CheckNumLockState, 30000)
-^+!Esc::ToggleDebugMode()
-NumLock::CheckNumLockState()
+;SetTimer(CheckNumLockState, 30000)
+;^+!Esc::ToggleDebugMode()
+;NumLock::CheckNumLockState()
+
+global SoundOn := A_ScriptDir . "\On.wav"
+global SoundOff := A_ScriptDir . "\Off.wav"
+
+^+!Esc:: {
+    global scriptEnabled, SoundOn, SoundOff, SoundSoft 
+    scriptEnabled := !scriptEnabled
+
+    msg := scriptEnabled ? "Refresh Toggle (Hz) On" : "Refresh Toggle (Hz) Off"
+    color := scriptEnabled ? "Green" : "Red"
+
+    originalSound := SoundSoft
+    SoundSoft := ""
+    ShowToggleTooltip(msg, color, TooltipX[1], TooltipY[1])
+    SoundSoft := originalSound
+
+    LogRefreshChange("N/A", "Script toggled via Ctrl+Shift+Alt+Esc")
+
+    SoundPlay(scriptEnabled ? SoundOn : SoundOff)
+}
+TryToggleRefreshRate(*) {
+    global SoundSoft, DurationBlocked, TooltipX
+
+    originalSound := SoundSoft
+    SoundSoft := ""  ; suppress tooltip sound
+
+    if app := GetRunningLauncher() {
+        ShowTestTooltip("⚠️ Cannot change refresh rate:`n" . app . " is currently running.", "Red", DurationBlocked, TooltipX[2], TooltipY[2])
+        SoundSoft := originalSound
+        return
+    }
+
+    ToggleRefreshRate()
+
+    SoundSoft := originalSound
+}
 Hotkey("^+r", TryToggleRefreshRate)
 Hotkey("^!r", TryToggleRefreshRate)
 Hotkey("^+!r", TryToggleRefreshRate)
@@ -90,13 +126,14 @@ ToggleDebugMode() {
     debugOverlay.SetFont(DefaultFont, DefaultFontFace)
     debugOverlay.AddText("cWhite BackgroundBlack", debugMode ? "Debug On" : "Debug Off")
     debugOverlay.Show("x10 y10 NoActivate")
-    SoundPlay(SoundSoft)
+    if IsSet(SoundSoft) && SoundSoft != ""
+		SoundPlay(SoundSoft)
     if !debugMode
         SetTimer(() => debugOverlay.Hide(), -DurationDebugFade)
 }
 
 ; === Debug Hotkeys ===
-1:: {
+/* 1:: {
     if debugMode {
         msg := scriptEnabled ? "Refresh Toggle (Hz) On" : "Refresh Toggle (Hz) Off"
         color := scriptEnabled ? "Green" : "Red"
@@ -127,22 +164,40 @@ ToggleDebugMode() {
     if debugMode {
         ShowConfirmationPopup("Confirm refresh rate change to 160 Hz?", "Y", 10000)
     }
-}
+} */
 
 ; === Tooltip Functions ===
 ShowToggleTooltip(text, color, x := 350, y := 150) {
-    global tooltipGui
-    tooltipGui.Destroy()
-    tooltipGui := Gui(DefaultGuiOpts)
-    tooltipGui.Opacity := DefaultOpacity
-    tooltipGui.BackColor := DefaultBackColor
-    tooltipGui.SetFont(DefaultFont, DefaultFontFace)
-    tooltipGui.AddText("c" . color . " BackgroundBlack", text)
+    global tooltipGui, DefaultGuiOpts, DefaultOpacity, DefaultBackColor
+    global DefaultFont, DefaultFontFace, SoundSoft, DurationToggle
+
+    ; Create the GUI once if it doesn't exist
+    if !IsSet(tooltipGui) || !IsObject(tooltipGui) {
+        tooltipGui := Gui(DefaultGuiOpts)
+        tooltipGui.Opacity := DefaultOpacity
+        tooltipGui.BackColor := DefaultBackColor
+        tooltipGui.SetFont(DefaultFont, DefaultFontFace)
+        tooltipGui.AddText("vTooltipText c" . color . " BackgroundBlack", text)
+    } else {
+        ; Update existing GUI
+        tooltipGui["TooltipText"].Text := text
+        tooltipGui["TooltipText"].SetFont("c" . color)
+    }
+
+    ; Position and show
     MonitorGet(MonitorGetPrimary(), &left, &top, &right, &bottom)
     tooltipGui.Show("x" (right - x) " y" (bottom - y) " NoActivate")
-    SoundPlay(SoundSoft)
-    SetTimer(() => tooltipGui.Hide(), -DurationToggle)
+
+    ; Play sound if set
+    if IsSet(SoundSoft) && SoundSoft != ""
+        SoundPlay(SoundSoft)
+
+    ; Hide after delay
+    SetTimer(() => (
+        IsObject(tooltipGui) && tooltipGui.Visible ? tooltipGui.Hide() : ""
+    ), -DurationToggle)
 }
+
 
 ShowTestTooltip(text, color, duration, x := 350, y := 150) {
     global tooltipGui
@@ -154,7 +209,8 @@ ShowTestTooltip(text, color, duration, x := 350, y := 150) {
     tooltipGui.AddText("c" . color . " BackgroundBlack", text)
     MonitorGet(MonitorGetPrimary(), &left, &top, &right, &bottom)
     tooltipGui.Show("x" (right - x) " y" (bottom - y) " NoActivate")
-    SoundPlay(SoundSoft)
+    if IsSet(SoundSoft) && SoundSoft != ""
+		SoundPlay(SoundSoft)
     SetTimer(() => tooltipGui.Hide(), -duration)
 }
 
@@ -163,7 +219,7 @@ MainPollingLoop() {
     if !scriptEnabled
         return
     MonitorLaunchers()
-    CheckManualRefreshChange()
+    ;CheckManualRefreshChange()
 }
 
 MonitorLaunchers() {
@@ -185,7 +241,7 @@ MonitorLaunchers() {
     }
 }
 
-CheckNumLockState() {
+/* CheckNumLockState() {
     global scriptEnabled
     isOn := GetKeyState("NumLock", "T")
     if isOn && !scriptEnabled {
@@ -197,16 +253,25 @@ CheckNumLockState() {
         ShowToggleTooltip("Refresh Toggle (Hz) Off", "Red", TooltipX[1], TooltipY[1])
         LogRefreshChange("N/A", "Script paused via Num Lock")
     }
-}
+} */
 
 CheckManualRefreshChange() {
     global lastScriptedRate, lastScriptedTime, lastManualCheck
+    global DurationManual, TooltipX, TooltipY
+
+    ; Avoid checking too frequently
     if (A_TickCount - lastManualCheck < 10000)
         return
     lastManualCheck := A_TickCount
+
+    ; Get current refresh rate
     currentHz := Round(GetCurrentRefreshRate())
-    if currentHz = "" || !IsNumber(currentHz)
+
+    ; Grace period: ignore changes shortly after a scripted switch
+    if (A_TickCount - lastScriptedTime < 5000)
         return
+
+    ; If the current rate differs significantly from what the script last set
     if Abs(currentHz - lastScriptedRate) > 10 {
         LogRefreshChange(currentHz, "Manual - User changed refresh rate")
         lastScriptedRate := currentHz
@@ -214,6 +279,7 @@ CheckManualRefreshChange() {
         ShowTestTooltip("Refresh rate manually changed to " . currentHz . " Hz", "Yellow", DurationManual, TooltipX[3], TooltipY[3])
     }
 }
+
 
 GetCurrentRefreshRate() {
     try {
@@ -243,8 +309,10 @@ LogRefreshChange(rate, reason := "") {
     FileAppend(entry . "`n", logFile)
 }
 
-ShowConfirmationPopup(promptText, confirmKey := "Y", timeout := 10000) {
+ShowConfirmationPopup(promptText, rate, confirmKey := "Y", timeout := 10000) {
     global TooltipX, TooltipY, DefaultGuiOpts, DefaultFont, DefaultFontFace, DefaultOpacity
+    global lastScriptedRate, lastScriptedTime, scriptPath, monitorIndex, DurationChanged
+
     local confirmGui := Gui(DefaultGuiOpts)
     confirmGui.Opacity := DefaultOpacity
     confirmGui.BackColor := "Black"
@@ -252,31 +320,26 @@ ShowConfirmationPopup(promptText, confirmKey := "Y", timeout := 10000) {
 
     confirmGui.AddText("cWhite BackgroundBlack", promptText)
     confirmGui.AddText("cGray BackgroundBlack", "Press [" . confirmKey . "] to confirm — auto-closes in " . timeout/1000 . "s")
+
     MonitorGet(MonitorGetPrimary(), &left, &top, &right, &bottom)
     confirmGui.Show("x" (right - TooltipX[6]) " y" (bottom - TooltipY[6]) " NoActivate")
 
-    listener := InputHook("L1")
-    listener.KeyOpt(confirmKey, "E")  ; only trigger on release
-    listener.Start(), listener.Wait(timeout)
+	listener := InputHook("L1")
+	listener.Start(), listener.Wait(timeout)
 
-    confirmGui.Destroy()
+	confirmGui.Destroy()
 
-    if listener.EndReason = "Key" && listener.Input = confirmKey {
-        ShowTestTooltip("✅ Confirmed: Switching to 160 Hz", "Green", 2000, TooltipX[4], TooltipY[4])
-        LogRefreshChange(160, "Manual (Confirmed via Debug)")
-        lastScriptedRate := 160
-        lastScriptedTime := A_TickCount
-        ; Optional → RunWait to actually switch
-        ; RunWait('powershell.exe -ExecutionPolicy Bypass -File "' scriptPath '" -Monitor ' monitorIndex ' -Rate 160, , "Hide")
-    }
-}
+	if (StrLower(listener.Input) = "y") {
+		RunWait('powershell.exe -ExecutionPolicy Bypass -File "' scriptPath '" -Monitor ' monitorIndex ' -Rate ' rate, , "Hide")
+		LogRefreshChange(rate, "Manual (Confirmed)")
+		lastScriptedRate := rate
+		lastScriptedTime := A_TickCount
+		ShowTestTooltip("✅ Confirmed: Switched to " . rate . " Hz", "Green", DurationChanged, TooltipX[4], TooltipY[4])
+		return true
+	}
 
-TryToggleRefreshRate(*) {
-    if app := GetRunningLauncher() {
-        ShowTestTooltip("⚠️ Cannot change refresh rate:`n" . app . " is currently running.", "Red", DurationBlocked, TooltipX[2], TooltipY[2])
-        return
-    }
-    ToggleRefreshRate()
+	ShowTestTooltip("❌ Refresh change canceled", "Gray", 1500, TooltipX[4], TooltipY[4])
+	return false
 }
 
 ToggleRefreshRate(*) {
@@ -288,10 +351,10 @@ ToggleRefreshRate(*) {
     newRate := refreshRates[currentIndex + 1]
     displayLabel := displayLabels[currentIndex + 1]
 
-    ; If switching to 160 and not already there → ask for confirmation
-    if newRate = 160 && lastScriptedRate != 160 {
-        ShowConfirmationPopup("Confirm refresh rate change to 160 Hz?", "Y", 10000)
-        return  ; wait for user to confirm via popup
+    ; If switching to a higher refresh rate from a high one → ask for confirmation
+    if (lastScriptedRate >= 140) && (newRate > lastScriptedRate) {
+        if !ShowConfirmationPopup("Confirm refresh rate change to " . newRate . " Hz?", newRate)
+            return  ; user canceled
     }
 
     ; Otherwise, toggle without confirmation
@@ -299,7 +362,7 @@ ToggleRefreshRate(*) {
     LogRefreshChange(newRate, "Manual")
     lastScriptedRate := newRate
     lastScriptedTime := A_TickCount
-    ShowTestTooltip("Switched to " . displayLabel . " Hz", "White", DurationChanged, TooltipX[4], TooltipY[4])
+    ShowTestTooltip("Switched to " . newRate . " Hz", "White", DurationChanged, TooltipX[4], TooltipY[4])
 }
 
 ^!Esc:: {  ; Emergency fallback to 120 Hz and exit
