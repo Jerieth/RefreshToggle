@@ -327,7 +327,7 @@ CheckManualRefreshChange() {
     lastManualCheck := A_TickCount
 
     ; Get current refresh rate
-    currentHz := Round(GetCurrentRefreshRate())
+    currentHz := Round(GetRefreshRateViaWMI())
 
     ; Grace period: ignore changes shortly after a scripted switch
     if (A_TickCount - lastScriptedTime < 5000)
@@ -441,6 +441,7 @@ ToggleRefreshRate(*) {
     MonitorGet(MonitorGetPrimary(), &left, &top, &right, &bottom)
     tooltipGui.Show("x" (right - TooltipX[5]) " y" (bottom - TooltipY[5]) " NoActivate")
     SoundPlay(SoundAlert)
+	SetTrayIconByHz(safeRate)
     Sleep(DurationExit)
     ExitApp
 }
