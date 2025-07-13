@@ -44,7 +44,7 @@ SetTrayIconByHz(hz) {
 }
 
 ; === Refresh Tracking ===
-lastScriptedRate := Round(GetCurrentRefreshRate())
+lastScriptedRate := Round(GetRefreshRateViaWMI())
 if lastScriptedRate = "" || !IsNumber(lastScriptedRate)
     lastScriptedRate := 120
 lastScriptedTime := A_TickCount
