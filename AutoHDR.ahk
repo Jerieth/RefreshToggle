@@ -1,5 +1,6 @@
 #Requires AutoHotkey v2.0
 #SingleInstance Force
+;This is an older version, please use Version 2 unless you like this version. 
 
 iniPath := A_ScriptDir . "\AutoHDR.ini"
 logPath := "C:\Logs\AutoHDR.log"
