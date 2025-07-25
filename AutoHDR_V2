@@ -2,6 +2,8 @@
 #SingleInstance Force
 #Warn All, Off
 
+;This is the latest version. 
+
 ; === Paths ===
 iniPath := A_ScriptDir . "\AutoHDR.ini"
 logDir := A_AppData . "\AutoHDR"
