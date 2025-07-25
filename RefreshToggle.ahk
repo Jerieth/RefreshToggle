@@ -3,6 +3,7 @@
 #Warn All
 #Warn LocalSameAsGlobal, Off
 global tooltipVisible := false
+global isTooltipActive := false
 
 InitTrayMenu()
 
@@ -30,7 +31,18 @@ hzOutOfGame := 120
 autoState := "idle"
 scriptPath := "C:\Scripts\PowerShell\Cycle-RefreshRate.ps1"
 
-
+; === Logging ===
+logDir := "C:\Logs"
+logDate := FormatTime(, "yyyy-MM-dd")
+logFile := logDir . "\RefreshRate_" . logDate . ".log"
+if !FileExist(logDir)
+    DirCreate(logDir)
+if !FileExist(logFile)
+    FileAppend("=== Refresh Rate Log Started: " . logDate . " ===`n", logFile)
+Loop Files logDir "\RefreshRate_*.log" {
+    if (A_Now - A_LoopFileTimeModified) // 86400 > 30
+        FileDelete A_LoopFileFullPath
+}
 
 ; === Tray Icon Switching ===
 GetRefreshRateViaDll() {
@@ -41,29 +53,28 @@ GetRefreshRateViaDll() {
 }
 
 SetTrayIconByHz(hz) {
-    if !IsNumber(hz) || hz = ""
-    {
-        icon := A_ScriptDir "\default.ico"
-        Menu("Tray", "Icon", icon)
-        return
-    }
-    switch hz {
-        case 120: icon := A_ScriptDir "\120.ico"
-        case 144: icon := A_ScriptDir "\144.ico"
-        case 160: icon := A_ScriptDir "\160.ico"
-        default:  icon := A_ScriptDir "\default.ico"
-    }
-    TraySetIcon icon
+	hz := Round(hz)
+    icon := (hz = 120) ? A_ScriptDir "\120.ico"
+         : (hz = 144) ? A_ScriptDir "\144.ico"
+         : (hz = 160) ? A_ScriptDir "\160.ico"
+         : A_ScriptDir "\default.ico"
+
+    TraySetIcon(icon)
 }
 
-; === Refresh Tracking ===
-lastScriptedRate := Round(GetRefreshRateViaWMI())
-if lastScriptedRate = "" || !IsNumber(lastScriptedRate)
-    lastScriptedRate := 120
+; ── Delayed Icon Set After Script Load ──
+SetTimer(() => SetTrayIconByHz(GetRefreshRateViaDll()), -1000)
+
+; === Refresh Tracking (Safe Initialization) ===
+rawHz := GetRefreshRateViaWMI()
+if rawHz < 120 {
+    LogRefreshChange(120, "Fallback - WMI refresh value below threshold")
+}
+lastScriptedRate := Round(Max(rawHz, 120))  ; enforces minimum fallback
 lastScriptedTime := A_TickCount
 lastManualCheck := A_TickCount
 
-SetTrayIconByHz(GetRefreshRateViaDll())
+;SetTrayIconByHz(GetRefreshRateViaDll())
 
 ; === Tooltip Defaults ===
 DefaultGuiOpts := "+AlwaysOnTop -Caption +ToolWindow -DPIScale"
@@ -87,19 +98,6 @@ DurationDebugFade := 5000
 ; === Sounds ===
 SoundSoft := "*64"
 SoundAlert := "*48"
-
-; === Logging ===
-logDir := "C:\Logs"
-logDate := FormatTime(, "yyyy-MM-dd")
-logFile := logDir . "\RefreshRate_" . logDate . ".log"
-if !FileExist(logDir)
-    DirCreate(logDir)
-if !FileExist(logFile)
-    FileAppend("=== Refresh Rate Log Started: " . logDate . " ===`n", logFile)
-Loop Files logDir "\RefreshRate_*.log" {
-    if (A_Now - A_LoopFileTimeModified) // 86400 > 30
-        FileDelete A_LoopFileFullPath
-}
 
 ; === Launcher List ===
 launchers := [
@@ -157,7 +155,7 @@ TryToggleRefreshRate(*) {
 
     SoundSoft := originalSound
 }
-;Hotkey("^+r", TryTyyoggleRefreshRate)
+;Hotkey("^+r", TryToggleRefreshRate)
 Hotkey("^!r", TryToggleRefreshRate)
 Hotkey("^+!r", TryToggleRefreshRate)
 
@@ -165,7 +163,8 @@ Hotkey("^+!r", TryToggleRefreshRate)
 ToggleDebugMode() {
     global debugMode, debugOverlay
     debugMode := !debugMode
-    debugOverlay.Destroy()
+	if IsObject(debugOverlay) && debugOverlay.Hwnd
+		debugOverlay.Destroy()
     debugOverlay := Gui(DefaultGuiOpts)
     debugOverlay.Opacity := DefaultOpacity
     debugOverlay.BackColor := DefaultBackColor
@@ -242,9 +241,22 @@ ShowToggleTooltip(text, color := "White", x := 350, y := 150) {
 
 ShowTestTooltip(text, color, duration, x := 350, y := 150) {
     global tooltipGui, SoundSoft, DefaultGuiOpts, DefaultOpacity, DefaultBackColor
-    global DefaultFont, DefaultFontFace
+    global DefaultFont, DefaultFontFace, isTooltipActive
 
-    tooltipGui.Destroy()
+    if isTooltipActive {
+        return  ; Block overlapping tooltips silently
+    }
+    isTooltipActive := true
+
+    ; Destroy if leftover GUI exists
+	if IsObject(tooltipGui) {
+		try {
+			if tooltipGui.Hwnd
+				tooltipGui.Destroy()
+		} catch {
+			; GUI was already destroyed — safe to continue
+		}
+	}
     tooltipGui := Gui(DefaultGuiOpts)
     tooltipGui.Opacity := DefaultOpacity
     tooltipGui.BackColor := DefaultBackColor
@@ -257,7 +269,10 @@ ShowTestTooltip(text, color, duration, x := 350, y := 150) {
     if IsSet(SoundSoft) && SoundSoft != ""
         SoundPlay(SoundSoft)
 
-    SetTimer(() => tooltipGui.Hide(), -duration)
+    SetTimer(() => (
+        (IsObject(tooltipGui) && tooltipGui.Hwnd ? tooltipGui.Destroy() : ""),
+        isTooltipActive := false
+    ), -duration)
 
     ; ── Tray Icon Switching Based on Tooltip Text ──
     if InStr(text, "🎮 Launcher detected") {
@@ -272,7 +287,7 @@ ShowTestTooltip(text, color, duration, x := 350, y := 150) {
         } else if InStr(text, "160 Hz") {
             SetTrayIconByHz(160)
         } else {
-            SetTrayIconByHz("")  ; fallback
+            SetTrayIconByHz("")
         }
     }
 }
@@ -334,8 +349,12 @@ CheckManualRefreshChange() {
         return
     lastManualCheck := A_TickCount
 
-    ; Get current refresh rate
-    currentHz := Round(GetRefreshRateViaWMI())
+    ; Get current refresh rate with fallback
+    rawHz := GetRefreshRateViaWMI()
+    if rawHz < 120 {
+        LogRefreshChange(120, "Fallback - Manual WMI check returned sub-threshold")
+    }
+    currentHz := Round(Max(rawHz, 120))
 
     ; Grace period: ignore changes shortly after a scripted switch
     if (A_TickCount - lastScriptedTime < 5000)
@@ -350,14 +369,15 @@ CheckManualRefreshChange() {
     }
 }
 
-
 GetRefreshRateViaWMI() {
     try {
         query := ComObjGet("winmgmts:").ExecQuery("Select * from Win32_VideoController")
-        for item in query
-            return Round(item.CurrentRefreshRate)
+        for item in query {
+            hz := item.CurrentRefreshRate
+            return (IsNumber(hz) && hz > 0) ? hz : 0
+        }
     } catch {
-        return ""
+        return 0
     }
 }
 
@@ -404,7 +424,7 @@ ShowConfirmationPopup(promptText, rate, confirmKey := "Y", timeout := 10000) {
 		LogRefreshChange(rate, "Manual (Confirmed)")
 		lastScriptedRate := rate
 		lastScriptedTime := A_TickCount
-		ShowTestTooltip("✅ Confirmed: Switched to " . rate . " Hz", "Green", DurationChanged, TooltipX[4], TooltipY[4])
+		ShowTestTooltip("✅ Confirmed: Switched to " . rate . " Hz", "Green", DurationChanged, TooltipX[7], TooltipY[4])
 		return true
 	}
 
